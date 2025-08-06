@@ -20,25 +20,17 @@ defmodule Server do
         [request_line | _] = String.split(request, "\r\n")
         [_, path, _] = String.split(request_line, " ")
 
-    1    # Build the response
+        # Build the response
         response =
           case String.split(path, "/", trim: true) do
             [] ->
-              "HTTP/1.1 200 OK
-
-"
+              "HTTP/1.1 200 OK\r\n\r\n"
 
             ["echo", body] ->
-              "HTTP/1.1 200 OK
-Content-Type: text/plain
-Content-Length: #{String.length(body)}
-
-#{body}"
+              "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: #{Kernel.byte_size(body)}\r\n\r\n#{body}"
 
             _ ->
-              "HTTP/1.1 404 Not Found
-
-"
+              "HTTP/1.1 404 Not Found\r\n\r\n"
           end
 
         # Send the response
@@ -53,15 +45,7 @@ Content-Length: #{String.length(body)}
 
     loop.(loop)
   end
-# ...existing code...
-
-response =
-  "HTTP/1.1 200 OK\r\n" <>
-  "Content-Length: 5\r\n" <>
-  "\r\n" <>
-  "apple"
-
-# ...existing code...end
+end
 
 defmodule CLI do
   def main(_args) do

@@ -31,7 +31,7 @@ defmodule Server do
             ["echo", body] ->
               "HTTP/1.1 200 OK
 Content-Type: text/plain
-Content-Length: #{byte_size(body)}
+Content-Length: #{String.length(body)}
 
 #{body}"
 
@@ -53,7 +53,15 @@ Content-Length: #{byte_size(body)}
 
     loop.(loop)
   end
-end
+# ...existing code...
+
+response =
+  "HTTP/1.1 200 OK\r\n" <>
+  "Content-Length: 5\r\n" <>
+  "\r\n" <>
+  "apple"
+
+# ...existing code...end
 
 defmodule CLI do
   def main(_args) do

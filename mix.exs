@@ -6,7 +6,7 @@ defmodule App.MixProject do
     [
       app: :codecrafters_http_server,
       version: "1.0.0",
-      elixir: "~> 1.18",
+      elixir: "~> 1.15",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       escript: [main_module: CLI]

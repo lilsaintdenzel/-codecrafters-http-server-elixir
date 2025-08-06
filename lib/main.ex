@@ -15,8 +15,14 @@ defmodule Server do
     # # ensures that we don't run into 'Address already in use' errors
      {:ok, socket} = :gen_tcp.listen(4221, [:binary, active: false, reuseaddr: true])
      {:ok, _client} = :gen_tcp.accept(socket)
-      {:ok} = :gen_tcp.send(_client, "HTTP/1.1 200 OK\r\n\r\n")
+     {:ok, client} = :gen_tcp.accept(socket)
+     {:ok, packet} = :gen_tcp.recv(client, 0)
 
+  if String.contains?(packet, "GET / HTTP/1.1") do
+      {:ok} = :gen_tcp.send(client, "HTTP/1.1 200 OK\r\n\r\n")
+    else
+      {:ok} = :gen_tcp.send(client, "HTTP/1.1 404 Not Found\r\n\r\n")
+    end
   end
 end
 

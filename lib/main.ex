@@ -20,7 +20,7 @@ defmodule Server do
         [request_line | _] = String.split(request, "\r\n")
         [_, path, _] = String.split(request_line, " ")
 
-        # Build the response
+    1    # Build the response
         response =
           case String.split(path, "/", trim: true) do
             [] ->
@@ -31,7 +31,7 @@ defmodule Server do
             ["echo", body] ->
               "HTTP/1.1 200 OK
 Content-Type: text/plain
-Content-Length: #{String.length(body)}
+Content-Length: #{byte_size(body)}
 
 #{body}"
 

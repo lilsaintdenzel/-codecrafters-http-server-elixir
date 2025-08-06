@@ -22,7 +22,31 @@ defmodule Server do
       {:ok} = :gen_tcp.send(client, "HTTP/1.1 200 OK\r\n\r\n")
     else
       {:ok} = :gen_tcp.send(client, "HTTP/1.1 404 Not Found\r\n\r\n")
+    end    # ...existing code...
+    
+    {:ok, socket} = :gen_tcp.listen(4221, [:binary, active: false, reuseaddr: true])
+    IO.puts("Listening on port 4221")
+    
+    loop = fn loop ->
+      {:ok, client} = :gen_tcp.accept(socket)
+      {:ok, request} = :gen_tcp.recv(client, 0)
+      [request_line | _] = String.split(request, "\r\n")
+      [_method, path | _] = String.split(request_line, " ")
+    
+      response =
+        case path do
+          "/" -> "HTTP/1.1 200 OK\r\n\r\n"
+          _ -> "HTTP/1.1 404 Not Found\r\n\r\n"
+        end
+    
+      :gen_tcp.send(client, response)
+      :gen_tcp.close(client)
+      loop.(loop)
     end
+    
+    loop.(loop)
+    
+    # ...existing code...
   end
 end
 

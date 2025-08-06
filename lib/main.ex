@@ -22,12 +22,23 @@ defmodule Server do
 
         # Build the response
         response =
-          case path do
-            "/" ->
-              "HTTP/1.1 200 OK\r\n\r\n"
+          case String.split(path, "/", trim: true) do
+            [] ->
+              "HTTP/1.1 200 OK
+
+"
+
+            ["echo", body] ->
+              "HTTP/1.1 200 OK
+Content-Type: text/plain
+Content-Length: #{String.length(body)}
+
+#{body}"
 
             _ ->
-              "HTTP/1.1 404 Not Found\r\n\r\n"
+              "HTTP/1.1 404 Not Found
+
+"
           end
 
         # Send the response

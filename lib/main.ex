@@ -22,7 +22,7 @@ defmodule Server do
         [_, path, _] = String.split(request_line, " ")
 
         # Build the response
-        response = 
+        response =
           case String.split(path, "/", trim: true) do
             [] ->
               "HTTP/1.1 200 OK\r\n\r\n"
@@ -31,7 +31,7 @@ defmodule Server do
               "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: #{Kernel.byte_size(body)}\r\n\r\n#{body}"
 
             ["user-agent"] ->
-              user_agent_header = 
+              user_agent_header =
                 Enum.find(header_lines, fn header ->
                   String.starts_with?(header, "User-Agent: ")
                 end)
@@ -39,6 +39,17 @@ defmodule Server do
               user_agent = String.trim_leading(user_agent_header, "User-Agent: ")
 
               "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: #{Kernel.byte_size(user_agent)}\r\n\r\n#{user_agent}"
+
+            ["files", filename] ->
+              directory = Application.get_env(:codecrafters_http_server, :directory)
+              filepath = Path.join(directory, filename)
+
+              if File.exists?(filepath) do
+                {:ok, body} = File.read(filepath)
+                "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: #{Kernel.byte_size(body)}\r\n\r\n#{body}"
+              else
+                "HTTP/1.1 404 Not Found\r\n\r\n"
+              end
 
             _ ->
               "HTTP/1.1 404 Not Found\r\n\r\n"
@@ -59,7 +70,11 @@ defmodule Server do
 end
 
 defmodule CLI do
-  def main(_args) do
+  def main(args) do
+    {opts, _, _} = OptionParser.parse(args, switches: [directory: :string])
+    directory = Keyword.get(opts, :directory)
+    Application.put_env(:codecrafters_http_server, :directory, directory)
+
     # Start the Server application
     {:ok, _pid} = Application.ensure_all_started(:codecrafters_http_server)
 

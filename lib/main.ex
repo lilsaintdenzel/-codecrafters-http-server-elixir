@@ -17,17 +17,28 @@ defmodule Server do
       spawn(fn ->
         # Read the request
         {:ok, request} = :gen_tcp.recv(client, 0)
-        [request_line | _] = String.split(request, "\r\n")
+        lines = String.split(request, "\r\n")
+        [request_line | header_lines] = lines
         [_, path, _] = String.split(request_line, " ")
 
         # Build the response
-        response =
+        response = 
           case String.split(path, "/", trim: true) do
             [] ->
               "HTTP/1.1 200 OK\r\n\r\n"
 
             ["echo", body] ->
               "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: #{Kernel.byte_size(body)}\r\n\r\n#{body}"
+
+            ["user-agent"] ->
+              user_agent_header = 
+                Enum.find(header_lines, fn header ->
+                  String.starts_with?(header, "User-Agent: ")
+                end)
+
+              user_agent = String.trim_leading(user_agent_header, "User-Agent: ")
+
+              "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: #{Kernel.byte_size(user_agent)}\r\n\r\n#{user_agent}"
 
             _ ->
               "HTTP/1.1 404 Not Found\r\n\r\n"

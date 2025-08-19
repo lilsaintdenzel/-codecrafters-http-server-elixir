@@ -17,20 +17,27 @@ defmodule Server do
       spawn(fn ->
         # Read the request
         {:ok, request} = :gen_tcp.recv(client, 0)
-        lines = String.split(request, "\r\n")
+
+        {head, body} =
+          case String.split(request, "\r\n\r\n", parts: 2) do
+            [head, body] -> {head, body}
+            [head] -> {head, ""}
+          end
+
+        lines = String.split(head, "\r\n")
         [request_line | header_lines] = lines
-        [_, path, _] = String.split(request_line, " ")
+        [method, path, _] = String.split(request_line, " ")
 
         # Build the response
         response =
-          case String.split(path, "/", trim: true) do
-            [] ->
+          case {method, String.split(path, "/", trim: true)} do
+            {"GET", []} ->
               "HTTP/1.1 200 OK\r\n\r\n"
 
-            ["echo", body] ->
-              "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: #{Kernel.byte_size(body)}\r\n\r\n#{body}"
+            {"GET", ["echo", echo_body]} ->
+              "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: #{Kernel.byte_size(echo_body)}\r\n\r\n#{echo_body}"
 
-            ["user-agent"] ->
+            {"GET", ["user-agent"]} ->
               user_agent_header =
                 Enum.find(header_lines, fn header ->
                   String.starts_with?(header, "User-Agent: ")
@@ -40,16 +47,22 @@ defmodule Server do
 
               "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: #{Kernel.byte_size(user_agent)}\r\n\r\n#{user_agent}"
 
-            ["files", filename] ->
+            {"GET", ["files", filename]} ->
               directory = Application.get_env(:codecrafters_http_server, :directory)
               filepath = Path.join(directory, filename)
 
               if File.exists?(filepath) do
-                {:ok, body} = File.read(filepath)
-                "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: #{Kernel.byte_size(body)}\r\n\r\n#{body}"
+                {:ok, file_body} = File.read(filepath)
+                "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: #{Kernel.byte_size(file_body)}\r\n\r\n#{file_body}"
               else
                 "HTTP/1.1 404 Not Found\r\n\r\n"
               end
+
+            {"POST", ["files", filename]} ->
+              directory = Application.get_env(:codecrafters_http_server, :directory)
+              filepath = Path.join(directory, filename)
+              File.write!(filepath, body)
+              "HTTP/1.1 201 Created\r\n\r\n"
 
             _ ->
               "HTTP/1.1 404 Not Found\r\n\r\n"

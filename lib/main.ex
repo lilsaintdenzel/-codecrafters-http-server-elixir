@@ -5,80 +5,95 @@ defmodule Server do
     Supervisor.start_link([{Task, fn -> Server.listen() end}], strategy: :one_for_one)
   end
 
+  defp parse_headers(header_lines) do
+    Enum.reduce(header_lines, %{}, fn header, acc ->
+      case String.split(header, ": ", parts: 2) do
+        [key, value] -> Map.put(acc, String.downcase(key), value)
+        _ -> acc
+      end
+    end)
+  end
+
   def listen() do
     IO.puts("Logs from your program will appear here!")
 
     {:ok, socket} = :gen_tcp.listen(4221, [:binary, active: false, reuseaddr: true])
     IO.puts("Listening on port 4221")
 
-    loop = fn loop ->
-      {:ok, client} = :gen_tcp.accept(socket)
+    accept_loop(socket)
+  end
 
-      spawn(fn ->
-        # Read the request
-        {:ok, request} = :gen_tcp.recv(client, 0)
+  defp accept_loop(socket) do
+    {:ok, client} = :gen_tcp.accept(socket)
 
-        {head, body} =
-          case String.split(request, "\r\n\r\n", parts: 2) do
-            [head, body] -> {head, body}
-            [head] -> {head, ""}
-          end
+    spawn(fn ->
+      # Read the request
+      {:ok, request} = :gen_tcp.recv(client, 0)
 
-        lines = String.split(head, "\r\n")
-        [request_line | header_lines] = lines
-        [method, path, _] = String.split(request_line, " ")
+      {head, body} = 
+        case String.split(request, "\r\n\r\n", parts: 2) do
+          [head, body] -> {head, body}
+          [head] -> {head, ""}
+        end
 
-        # Build the response
-        response =
-          case {method, String.split(path, "/", trim: true)} do
-            {"GET", []} ->
-              "HTTP/1.1 200 OK\r\n\r\n"
+      lines = String.split(head, "\r\n")
+      [request_line | header_lines] = lines
+      headers = parse_headers(header_lines)
+      [method, path, _] = String.split(request_line, " ")
 
-            {"GET", ["echo", echo_body]} ->
-              "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: #{Kernel.byte_size(echo_body)}\r\n\r\n#{echo_body}"
+      # Build the response
+      response = 
+        case {method, String.split(path, "/", trim: true)} do
+          {"GET", []} ->
+            "HTTP/1.1 200 OK\r\n\r\n"
 
-            {"GET", ["user-agent"]} ->
-              user_agent_header =
-                Enum.find(header_lines, fn header ->
-                  String.starts_with?(header, "User-Agent: ")
-                end)
+          {"GET", ["echo", echo_body]} ->
+            accept_encoding = Map.get(headers, "accept-encoding", "")
+            encodings = String.split(accept_encoding, ",") |> Enum.map(&String.trim/1)
 
-              user_agent = String.trim_leading(user_agent_header, "User-Agent: ")
-
-              "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: #{Kernel.byte_size(user_agent)}\r\n\r\n#{user_agent}"
-
-            {"GET", ["files", filename]} ->
-              directory = Application.get_env(:codecrafters_http_server, :directory)
-              filepath = Path.join(directory, filename)
-
-              if File.exists?(filepath) do
-                {:ok, file_body} = File.read(filepath)
-                "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: #{Kernel.byte_size(file_body)}\r\n\r\n#{file_body}"
+            encoding_header =
+              if "gzip" in encodings do
+                "Content-Encoding: gzip\r\n"
               else
-                "HTTP/1.1 404 Not Found\r\n\r\n"
+                ""
               end
 
-            {"POST", ["files", filename]} ->
-              directory = Application.get_env(:codecrafters_http_server, :directory)
-              filepath = Path.join(directory, filename)
-              File.write!(filepath, body)
-              "HTTP/1.1 201 Created\r\n\r\n"
+            "HTTP/1.1 200 OK\r\n#{encoding_header}Content-Type: text/plain\r\nContent-Length: #{Kernel.byte_size(echo_body)}\r\n\r\n#{echo_body}"
 
-            _ ->
+          {"GET", ["user-agent"]} ->
+            user_agent = Map.get(headers, "user-agent")
+
+            "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: #{Kernel.byte_size(user_agent)}\r\n\r\n#{user_agent}"
+
+          {"GET", ["files", filename]} ->
+            directory = Application.get_env(:codecrafters_http_server, :directory)
+            filepath = Path.join(directory, filename)
+
+            if File.exists?(filepath) do
+              {:ok, file_body} = File.read(filepath)
+              "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: #{Kernel.byte_size(file_body)}\r\n\r\n#{file_body}"
+            else
               "HTTP/1.1 404 Not Found\r\n\r\n"
-          end
+            end
 
-        # Send the response
-        :gen_tcp.send(client, response)
+          {"POST", ["files", filename]} ->
+            directory = Application.get_env(:codecrafters_http_server, :directory)
+            filepath = Path.join(directory, filename)
+            File.write!(filepath, body)
+            "HTTP/1.1 201 Created\r\n\r\n"
 
-        # Close the connection
-        :gen_tcp.close(client)
-      end)
+          _ ->
+            "HTTP/1.1 404 Not Found\r\n\r\n"
+        end
 
-      loop.(loop)
-    end
+      # Send the response
+      :gen_tcp.send(client, response)
 
-    loop.(loop)
+      # Close the connection
+      :gen_tcp.close(client)
+    end)
+
+    accept_loop(socket)
   end
 end
 

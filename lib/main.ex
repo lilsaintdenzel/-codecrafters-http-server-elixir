@@ -51,14 +51,12 @@ defmodule Server do
             accept_encoding = Map.get(headers, "accept-encoding", "")
             encodings = String.split(accept_encoding, ",") |> Enum.map(&String.trim/1)
 
-            encoding_header =
-              if "gzip" in encodings do
-                "Content-Encoding: gzip\r\n"
-              else
-                ""
-              end
-
-            "HTTP/1.1 200 OK\r\n#{encoding_header}Content-Type: text/plain\r\nContent-Length: #{Kernel.byte_size(echo_body)}\r\n\r\n#{echo_body}"
+            if "gzip" in encodings do
+              compressed_body = :zlib.gzip(echo_body)
+              "HTTP/1.1 200 OK\r\nContent-Encoding: gzip\r\nContent-Type: text/plain\r\nContent-Length: #{Kernel.byte_size(compressed_body)}\r\n\r\n#{compressed_body}"
+            else
+              "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: #{Kernel.byte_size(echo_body)}\r\n\r\n#{echo_body}"
+            end
 
           {"GET", ["user-agent"]} ->
             user_agent = Map.get(headers, "user-agent")

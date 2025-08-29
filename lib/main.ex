@@ -32,7 +32,7 @@ defmodule Server do
   defp handle_connection(client) do
     case :gen_tcp.recv(client, 0) do
       {:ok, request} ->
-        {head, body} =
+        {head, body} = 
           case String.split(request, "\r\n\r\n", parts: 2) do
             [head, body] -> {head, body}
             [head] -> {head, ""}
@@ -44,7 +44,7 @@ defmodule Server do
         [method, path, _] = String.split(request_line, " ")
 
         # Build the response
-        response =
+        response = 
           case {method, String.split(path, "/", trim: true)} do
             {"GET", []} ->
               "HTTP/1.1 200 OK\r\n\r\n"
@@ -86,11 +86,22 @@ defmodule Server do
               "HTTP/1.1 404 Not Found\r\n\r\n"
           end
 
+        # Handle Connection: close
+        connection_header = Map.get(headers, "connection")
+
+        final_response = 
+          if connection_header == "close" do
+            [resp_head, resp_body] = String.split(response, "\r\n\r\n", parts: 2)
+            "#{resp_head}\r\nConnection: close\r\n\r\n#{resp_body}"
+          else
+            response
+          end
+
         # Send the response
-        :gen_tcp.send(client, response)
+        :gen_tcp.send(client, final_response)
 
         # Decide whether to close or keep alive
-        if Map.get(headers, "connection") == "close" do
+        if connection_header == "close" do
           :gen_tcp.close(client)
         else
           handle_connection(client)
